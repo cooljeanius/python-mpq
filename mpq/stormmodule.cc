@@ -2,11 +2,16 @@
 #define STORM_MODULE
 #include "stormmodule.h"
 
+#include "python_wrapper.hpp"
+
+#include <vector>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 static PyObject *StormError;
+static PyObject *NoMoreFilesError;
 
 /*
  * Manipulating MPQ archives
@@ -14,6 +19,7 @@ static PyObject *StormError;
 
 static PyObject * Storm_SFileOpenArchive(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	char *name;
 	int priority;
 	int flags;
@@ -23,9 +29,23 @@ static PyObject * Storm_SFileOpenArchive(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	result = SFileOpenArchive(name, priority, MPQ_OPEN_READ_ONLY, &mpq);
+#else
+	TCHAR *name;
+	DWORD priority;
+	int flags;
+
+	if (!python::parse_tuple(args, "SFileOpenArchive", &name, &priority, &flags)) {
+		return NULL;
+	}
+	bool result = SFileOpenArchive(name, priority, MPQ_OPEN_READ_ONLY, &mpq);
+#endif
 
 	if (!result) {
+#ifdef MPQ_HEAD
 		int error = GetLastError();
+#else
+		DWORD error = GetLastError();
+#endif
 		switch (error) {
 			case ERROR_FILE_NOT_FOUND:
 				PyErr_Format(PyExc_IOError, "Could not open archive: No such file or directory: %s", name);
@@ -38,11 +58,16 @@ static PyObject * Storm_SFileOpenArchive(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 
+#ifdef MPQ_HEAD
 	return Py_BuildValue("l", mpq);
+#else
+	return python::build_value(mpq);
+#endif
 }
 
 static PyObject * Storm_SFileAddListFile(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	char *name;
 	bool result;
 
@@ -50,6 +75,14 @@ static PyObject * Storm_SFileAddListFile(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	result = SFileAddListFile(mpq, name);
+#else
+	TCHAR *name;
+
+	if (!python::parse_tuple(args, "SFileAddListFile", &mpq, &name)) {
+		return NULL;
+	}
+	int result = SFileAddListFile(mpq, name);
+#endif
 
 	if (result != ERROR_SUCCESS) {
 		PyErr_SetString(StormError, "Error adding listfile");
@@ -61,12 +94,20 @@ static PyObject * Storm_SFileAddListFile(PyObject *self, PyObject *args) {
 
 static PyObject * Storm_SFileFlushArchive(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	bool result;
 
 	if (!PyArg_ParseTuple(args, "l:SFileFlushArchive", &mpq)) {
 		return NULL;
 	}
 	result = SFileFlushArchive(mpq);
+#else
+
+	if (!python::parse_tuple(args, "SFileFlushArchive", &mpq)) {
+		return NULL;
+	}
+	bool result = SFileFlushArchive(mpq);
+#endif
 
 	if (!result) {
 		PyErr_SetString(StormError, "Error flushing archive, archive may be corrupted!");
@@ -78,12 +119,20 @@ static PyObject * Storm_SFileFlushArchive(PyObject *self, PyObject *args) {
 
 static PyObject * Storm_SFileCloseArchive(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	bool result;
 
 	if (!PyArg_ParseTuple(args, "l:SFileCloseArchive", &mpq)) {
 		return NULL;
 	}
 	result = SFileCloseArchive(mpq);
+#else
+
+	if (!python::parse_tuple (args, "SFileCloseArchive", &mpq)) {
+		return NULL;
+	}
+	bool result = SFileCloseArchive(mpq);
+#endif
 
 	if (!result) {
 		PyErr_SetString(StormError, "Error closing archive");
@@ -95,6 +144,7 @@ static PyObject * Storm_SFileCloseArchive(PyObject *self, PyObject *args) {
 
 static PyObject * Storm_SFileCompactArchive(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	char *listfile;
 	bool reserved = 0; /* Unused */
 	bool result;
@@ -103,6 +153,15 @@ static PyObject * Storm_SFileCompactArchive(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	result = SFileCompactArchive(mpq, listfile, reserved);
+#else
+	TCHAR *listfile;
+	bool reserved = 0; /* Unused */
+
+	if (!python::parse_tuple(args, "SFileCompactArchive", &mpq, &listfile)) {
+		return NULL;
+	}
+	bool result = SFileCompactArchive(mpq, listfile, reserved);
+#endif
 
 	if (!result) {
 		PyErr_SetString(StormError, "Error compacting archive");
@@ -118,6 +177,7 @@ static PyObject * Storm_SFileCompactArchive(PyObject *self, PyObject *args) {
 
 static PyObject * Storm_SFileOpenPatchArchive(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	char *name;
 	char *prefix;
 	int flags;
@@ -127,9 +187,23 @@ static PyObject * Storm_SFileOpenPatchArchive(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	result = SFileOpenPatchArchive(mpq, name, prefix, flags);
+#else
+	TCHAR *name;
+	char *prefix;
+	DWORD flags;
+
+	if (!python::parse_tuple(args, "SFileOpenPatchArchive", &mpq, &name, &prefix, &flags)) {
+		return NULL;
+	}
+	bool result = SFileOpenPatchArchive(mpq, name, prefix, flags);
+#endif
 
 	if (!result) {
+#ifdef MPQ_HEAD
 		int error = GetLastError();
+#else
+		DWORD error = GetLastError();
+#endif
 		switch (error) {
 			case ERROR_INVALID_HANDLE:
 				PyErr_SetString(PyExc_TypeError, "Could not patch archive: Invalid handle");
@@ -159,12 +233,20 @@ static PyObject * Storm_SFileOpenPatchArchive(PyObject *self, PyObject *args) {
 
 static PyObject * Storm_SFileIsPatchedArchive(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
+#ifdef MPQ_HEAD
 	bool result;
 
 	if (!PyArg_ParseTuple(args, "l:SFileIsPatchedArchive", &mpq)) {
 		return NULL;
 	}
 	result = SFileIsPatchedArchive(mpq);
+#else
+
+	if (!python::parse_tuple(args, "SFileIsPatchedArchive", &mpq)) {
+		return NULL;
+	}
+	bool result = SFileIsPatchedArchive(mpq);
+#endif
 
 	if (!result) {
 		Py_RETURN_FALSE;
@@ -180,6 +262,7 @@ static PyObject * Storm_SFileIsPatchedArchive(PyObject *self, PyObject *args) {
 static PyObject * Storm_SFileOpenFileEx(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
 	char *name;
+#ifdef MPQ_HEAD
 	int scope;
 	HANDLE file = NULL;
 	bool result;
@@ -188,17 +271,31 @@ static PyObject * Storm_SFileOpenFileEx(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	result = SFileOpenFileEx(mpq, name, scope, &file);
+#else
+	DWORD scope;
+	HANDLE file = NULL;
+
+	if (!python::parse_tuple(args, "SFileOpenFileEx", &mpq, &name, &scope)) {
+		return NULL;
+	}
+	bool result = SFileOpenFileEx(mpq, name, scope, &file);
+#endif
 
 	if (!result) {
 		PyErr_SetString(StormError, "Error opening file");
 		return NULL;
 	}
 
+#ifdef MPQ_HEAD
 	return Py_BuildValue("l", file);
+#else
+	return python::build_value(file);
+#endif
 }
 
 static PyObject * Storm_SFileGetFileSize(PyObject *self, PyObject *args) {
 	HANDLE file = NULL;
+#ifdef MPQ_HEAD
 	unsigned int sizeLow;
 	unsigned int sizeHigh;
 
@@ -206,17 +303,32 @@ static PyObject * Storm_SFileGetFileSize(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	sizeLow = SFileGetFileSize(file, &sizeHigh);
+#else
+
+	if (!python::parse_tuple(args, "SFileGetFileSize", &file)) {
+		return NULL;
+	}
+	DWORD sizeHigh;
+	DWORD sizeLow = SFileGetFileSize(file, &sizeHigh);
+#endif
 
 	if (sizeLow == SFILE_INVALID_SIZE) {
 		PyErr_SetString(StormError, "Error getting file size");
 		return NULL;
 	}
 
+#ifdef MPQ_HEAD
 	return Py_BuildValue("l", sizeLow | sizeHigh);
+#else
+	return python::build_value ( (((uint64_t)sizeLow  << 0)  & 0x00000000FFFFFFFF)
+	                           | (((uint64_t)sizeHigh << 32) & 0xFFFFFFFF00000000)
+	                           );
+#endif
 }
 
 static PyObject * Storm_SFileSetFilePointer(PyObject *self, PyObject *args) {
 	HANDLE file = NULL;
+#ifdef MPQ_HEAD
 	unsigned long offset = 0;
 	int whence;
 	int posLow = 0;
@@ -230,9 +342,27 @@ static PyObject * Storm_SFileSetFilePointer(PyObject *self, PyObject *args) {
 	posLow = (unsigned int) offset;
 	posHigh = (unsigned int)(offset >> 32);
 	result = SFileSetFilePointer(file, posLow, &posHigh, whence);
+#else
+	uint64_t offset = 0;
+	DWORD whence;
+
+	if (!python::parse_tuple(args, "SFileSetFilePointer", &file, &offset, &whence)) {
+		return NULL;
+	}
+
+	//! \note The StormLib API is broken here: LONG is signed, while it surely
+	//! should be unsigned.
+	LONG posLow =  (offset & 0x00000000FFFFFFFF) >> 0;
+	LONG posHigh = (offset & 0xFFFFFFFF00000000) >> 32;
+	DWORD result = SFileSetFilePointer(file, posLow, &posHigh, whence);
+#endif
 
 	if (result == SFILE_INVALID_SIZE) {
+#ifdef MPQ_HEAD
 		int error = GetLastError();
+#else
+		DWORD error = GetLastError();
+#endif
 		switch (error) {
 			case ERROR_INVALID_HANDLE:
 				PyErr_SetString(PyExc_TypeError, "Could not seek within file: Invalid handle");
@@ -251,11 +381,18 @@ static PyObject * Storm_SFileSetFilePointer(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 
+#ifdef MPQ_HEAD
 	return Py_BuildValue("l", result | posHigh);
+#else
+	return python::build_value ( (((uint64_t)result  << 0)  & 0x00000000FFFFFFFF)
+	                           | (((uint64_t)posHigh << 32) & 0xFFFFFFFF00000000)
+	                           );
+#endif
 }
 
 static PyObject * Storm_SFileReadFile(PyObject *self, PyObject *args) {
 	HANDLE file = NULL;
+#ifdef MPQ_HEAD
 	char * buffer;
 	unsigned int size;
 	unsigned int bytesRead;
@@ -270,9 +407,25 @@ static PyObject * Storm_SFileReadFile(PyObject *self, PyObject *args) {
 	buffer = (char*)malloc(size);
 
 	result = SFileReadFile(file, buffer, size, &bytesRead, &overlapped);
+#else
+	DWORD size;
+	DWORD bytesRead;
+
+	if (!python::parse_tuple(args, "SFileReadFile", &file, &size)) {
+		return NULL;
+	}
+
+	std::vector<char> buffer (size);
+
+	bool result = SFileReadFile(file, buffer.data(), size, &bytesRead, NULL);
+#endif
 
 	if (!result) {
+#ifdef MPQ_HEAD
 		int error = GetLastError();
+#else
+		DWORD error = GetLastError();
+#endif
 		if (error != ERROR_HANDLE_EOF) {
 			switch (error) {
 				case ERROR_INVALID_HANDLE:
@@ -290,20 +443,32 @@ static PyObject * Storm_SFileReadFile(PyObject *self, PyObject *args) {
 		}
 	}
 
+#ifdef MPQ_HEAD
 	ret = Py_BuildValue("s#", buffer, bytesRead);
 	free(buffer);
 
 	return ret;
+#else
+	assert (bytesRead <= (DWORD)std::numeric_limits<int>::max());
+	return python::build_value(std::pair<char*, int> (buffer.data(), bytesRead));
+#endif
 }
 
 static PyObject * Storm_SFileCloseFile(PyObject *self, PyObject *args) {
 	HANDLE file = NULL;
 
+#ifdef MPQ_HEAD
 	bool result;
 	if (!PyArg_ParseTuple(args, "l:SFileCloseFile", &file)) {
 		return NULL;
 	}
 	result = SFileCloseFile(file);
+#else
+	if (!python::parse_tuple(args, "SFileCloseFile", &file)) {
+		return NULL;
+	}
+	bool result = SFileCloseFile(file);
+#endif
 
 	if (!result) {
 		PyErr_SetString(StormError, "Error closing file");
@@ -316,12 +481,20 @@ static PyObject * Storm_SFileCloseFile(PyObject *self, PyObject *args) {
 static PyObject * Storm_SFileHasFile(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
 	char *name;
+#ifdef MPQ_HEAD
 	bool result;
 
 	if (!PyArg_ParseTuple(args, "ls:SFileHasFile", &mpq, &name)) {
 		return NULL;
 	}
 	result = SFileHasFile(mpq, name);
+#else
+
+	if (!python::parse_tuple(args, "SFileHasFile", &mpq, &name)) {
+		return NULL;
+	}
+	bool result = SFileHasFile(mpq, name);
+#endif
 
 	if (!result) {
 		if (GetLastError() == ERROR_FILE_NOT_FOUND) {
@@ -338,23 +511,36 @@ static PyObject * Storm_SFileHasFile(PyObject *self, PyObject *args) {
 static PyObject * Storm_SFileGetFileName(PyObject *self, PyObject *args) {
 	HANDLE file = NULL;
 	char name[MAX_PATH];
+#ifdef MPQ_HEAD
 	bool result;
 
 	if (!PyArg_ParseTuple(args, "l:SFileGetFileName", &file)) {
 		return NULL;
 	}
 	result = SFileGetFileName(file, name);
+#else
+
+	if (!python::parse_tuple(args, "SFileGetFileName", &file)) {
+		return NULL;
+	}
+	bool result = SFileGetFileName(file, name);
+#endif
 
 	if (!result) {
 		PyErr_SetString(StormError, "Error getting file name");
 		return NULL;
 	}
 
+#ifdef MPQ_HEAD
 	return Py_BuildValue("s", name);
+#else
+	return python::build_value(name);
+#endif
 }
 
 static PyObject * Storm_SFileGetFileInfo(PyObject *self, PyObject *args) {
 	HANDLE file = NULL;
+#ifdef MPQ_HEAD
 	int type;
 	int value = 0;
 	long longvalue = 0;
@@ -376,6 +562,17 @@ static PyObject * Storm_SFileGetFileInfo(PyObject *self, PyObject *args) {
 		size = sizeof(int);
 		result = SFileGetFileInfo(file, type, &value, size);
 	}
+#else
+	SFileInfoClass infoClass;
+
+	if (!python::parse_tuple(args, "SFileGetFileInfo", &file, &infoClass)) {
+		return NULL;
+	}
+
+	int value = 0;
+	DWORD size = sizeof(value);
+	bool result = SFileGetFileInfo(file, infoClass, &value, size, 0);
+#endif
 
 	if (!result) {
 		if (GetLastError() == ERROR_INVALID_PARAMETER) {
@@ -387,16 +584,21 @@ static PyObject * Storm_SFileGetFileInfo(PyObject *self, PyObject *args) {
 		}
 	}
 
+#ifdef MPQ_HEAD
 	if (type == SFILE_INFO_FILETIME) {
 		return Py_BuildValue("l", longvalue);
 	} else {
 		return Py_BuildValue("i", value);
 	}
+#else
+	return python::build_value(value);
+#endif
 }
 
 static PyObject * Storm_SFileExtractFile(PyObject *self, PyObject *args) {
 	HANDLE mpq = NULL;
 	char *name;
+#ifdef MPQ_HEAD
 	char *localName;
 	bool result;
 
@@ -404,9 +606,142 @@ static PyObject * Storm_SFileExtractFile(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 	result = SFileExtractFile(mpq, name, localName);
+#else
+	TCHAR *localName;
+	DWORD scope;
+
+	if (!python::parse_tuple(args, "SFileExtractFile", &mpq, &name, &localName, &scope)) {
+		return NULL;
+	}
+	bool result = SFileExtractFile(mpq, name, localName, scope);
+#endif
 
 	if (!result) {
+#ifdef MPQ_HEAD
 		PyErr_SetString(StormError, "Error extracting file");
+		return NULL;
+#else
+		if (GetLastError() == ERROR_UNKNOWN_FILE_KEY) {
+			PyErr_Format(StormError, "Error extracting file: File Key `%s' unknown", name);
+			return NULL;
+		} else {
+			PyErr_Format(StormError, "Error extracting file: %i", GetLastError());
+			return NULL;
+		}
+#endif
+	}
+
+	Py_RETURN_NONE;
+}
+
+static PyObject * Storm_SFileFindFirstFile(PyObject *self, PyObject *args) {
+	HANDLE mpq = NULL;
+	char *mask;
+	SFILE_FIND_DATA findFileData;
+	TCHAR *listFile; // XXX Unused for now
+
+	if (!python::parse_tuple(args, "SFileFindFirstFile", &mpq, &listFile, &mask)) {
+		return NULL;
+	}
+	HANDLE result = SFileFindFirstFile(mpq, mask, &findFileData, NULL);
+
+	if (!result) {
+		PyErr_SetString(StormError, "Error searching archive");
+		return NULL;
+	}
+
+	return python::build_value(result, findFileData.cFileName);
+}
+
+static PyObject * Storm_SFileFindNextFile(PyObject *self, PyObject *args) {
+	HANDLE find = NULL;
+	SFILE_FIND_DATA findFileData;
+
+	if (!python::parse_tuple(args, "SFileFindFirstFile", &find)) {
+		return NULL;
+	}
+	bool result = SFileFindNextFile(find, &findFileData);
+
+	if (!result) {
+		if (GetLastError() == ERROR_NO_MORE_FILES) {
+			PyErr_SetString(NoMoreFilesError, "");
+			return NULL;
+		} else {
+			PyErr_SetString(StormError, "Error searching for next result in archive");
+			return NULL;
+		}
+	}
+
+	return python::build_value(findFileData.cFileName);
+}
+
+static PyObject * Storm_SFileFindClose(PyObject *self, PyObject *args) {
+	HANDLE find = NULL;
+
+	if (!python::parse_tuple(args, "SFileFindFirstFile", &find)) {
+		return NULL;
+	}
+	bool result = SFileFindClose(find);
+
+	if (!result) {
+		PyErr_SetString(StormError, "Error closing archive search");
+		return NULL;
+	}
+
+	Py_RETURN_NONE;
+}
+
+static PyObject * Storm_SListFileFindFirstFile(PyObject *self, PyObject *args) {
+	HANDLE mpq = NULL;
+	char *mask;
+	char *listFile; // XXX Unused for now
+	SFILE_FIND_DATA findFileData;
+
+	if (!python::parse_tuple(args, "SListFileFindFirstFile", &mpq, &listFile, &mask)) {
+		return NULL;
+	}
+	HANDLE result = SListFileFindFirstFile(mpq, NULL, mask, &findFileData);
+
+	if (!result) {
+		PyErr_SetString(StormError, "Error searching listfile");
+		return NULL;
+	}
+
+	return python::build_value(result, findFileData.cFileName);
+}
+
+static PyObject * Storm_SListFileFindNextFile(PyObject *self, PyObject *args) {
+	HANDLE find = NULL;
+	SFILE_FIND_DATA findFileData;
+
+	if (!python::parse_tuple(args, "SListFileFindFirstFile", &find)) {
+		return NULL;
+	}
+	bool result = SListFileFindNextFile(find, &findFileData);
+
+	if (!result) {
+		if (GetLastError() == ERROR_NO_MORE_FILES) {
+			PyErr_SetString(NoMoreFilesError, "");
+			return NULL;
+		} else {
+			PyErr_SetString(StormError, "Error searching for next result in listfile");
+			return NULL;
+		}
+	}
+
+	return python::build_value(findFileData.cFileName);
+}
+
+static PyObject * Storm_SListFileFindClose(PyObject *self, PyObject *args) {
+	HANDLE find = NULL;
+
+	if (!python::parse_tuple(args, "SListFileFindFirstFile", &find)) {
+		return NULL;
+	}
+	bool result = SListFileFindClose(find);
+
+	if (!result) {
+		PyErr_SetString(StormError, "Error closing listfile search");
 		return NULL;
 	}
 
@@ -440,21 +775,56 @@ static PyMethodDef StormMethods[] = {
 	/* SFileVerifyFile (unimplemented) */
 	/* SFileVerifyArchive (unimplemented) */
 	{"SFileExtractFile", Storm_SFileExtractFile, METH_VARARGS, "Extracts a file from an MPQ archive to the local drive"},
+
+	/* File searching */
+	{"SFileFindFirstFile", Storm_SFileFindFirstFile, METH_VARARGS, "Finds the first file matching the specification in the archive"},
+	{"SFileFindNextFile", Storm_SFileFindNextFile, METH_VARARGS, "Finds the next file matching the specification in the archive"},
+	{"SFileFindClose", Storm_SFileFindClose, METH_VARARGS, "Stops searching files in the archive"},
+	{"SListFileFindFirstFile", Storm_SListFileFindFirstFile, METH_VARARGS, "Finds the first file matching the specification in the listfile"},
+	{"SListFileFindNextFile", Storm_SListFileFindNextFile, METH_VARARGS, "Finds the next file matching the specification in the listfile"},
+	{"SListFileFindClose", Storm_SListFileFindClose, METH_VARARGS, "Stops searching files in the listfile"},
 	{NULL, NULL, 0, NULL} /* Sentinel */
 };
 
 
+#ifdef MPQ_HEAD
+#define DECLARE(x) PyObject_SetAttrString(m, #x, PyLong_FromLong((long) x));
+#else
+#define storm_doc "Python bindings for StormLib"
 #define DECLARE(x) PyObject_SetAttrString(m, #x, PyLong_FromLong((long) x));
 
-PyMODINIT_FUNC initstorm(void) {
+static struct PyModuleDef moduledef = {
+	PyModuleDef_HEAD_INIT,
+	"storm", /* m_name */
+	storm_doc, /* m_doc */
+	-1, /* m_size */
+	StormMethods, /* m_methods */
+	NULL, /* m_reload */
+	NULL, /* m_traverse */
+	NULL, /* m_clear */
+	NULL, /* m_free */
+};
+#endif
+
+#define MOD_INIT(name) PyMODINIT_FUNC PyInit_##name(void)
+
+MOD_INIT(storm) {
 	PyObject *m;
 
+#ifdef MPQ_HEAD
 	m = Py_InitModule("storm", StormMethods);
+#else
+	m = PyModule_Create(&moduledef);
+#endif
 	if (m == NULL) return;
 
 	StormError = PyErr_NewException((char *)"storm.error", NULL, NULL);
 	Py_INCREF(StormError);
 	PyModule_AddObject(m, "error", StormError);
+
+	NoMoreFilesError = PyErr_NewException((char *)"storm.NoMoreFilesError", NULL, NULL);
+	Py_INCREF(NoMoreFilesError);
+	PyModule_AddObject(m, "NoMoreFilesError", NoMoreFilesError);
 
 	/* SFileOpenArchive */
 	DECLARE(MPQ_OPEN_NO_LISTFILE);
@@ -463,6 +833,7 @@ PyMODINIT_FUNC initstorm(void) {
 	DECLARE(MPQ_OPEN_CHECK_SECTOR_CRC);
 	DECLARE(MPQ_OPEN_READ_ONLY);
 
+#ifdef MPQ_HEAD
 	/* SFileOpenFileEx */
 	DECLARE(SFILE_OPEN_PATCHED_FILE);
 
@@ -483,6 +854,30 @@ PyMODINIT_FUNC initstorm(void) {
 	DECLARE(SFILE_INFO_KEY);
 	DECLARE(SFILE_INFO_KEY_UNFIXED);
 	DECLARE(SFILE_INFO_FILETIME);
+#else
+	/* SFileGetFileInfo */
+	DECLARE(SFileInfoPatchChain);
+	DECLARE(SFileInfoFileEntry);
+	DECLARE(SFileInfoHashEntry);
+	DECLARE(SFileInfoHashIndex);
+	DECLARE(SFileInfoNameHash1);
+	DECLARE(SFileInfoNameHash2);
+	DECLARE(SFileInfoNameHash3);
+	DECLARE(SFileInfoLocale);
+	DECLARE(SFileInfoFileIndex);
+	DECLARE(SFileInfoByteOffset);
+	DECLARE(SFileInfoFileTime);
+	DECLARE(SFileInfoFlags);
+	DECLARE(SFileInfoFileSize);
+	DECLARE(SFileInfoCompressedSize);
+	DECLARE(SFileInfoEncryptionKey);
+	DECLARE(SFileInfoEncryptionKeyRaw);
+
+	/* SFileOpenFileEx, SFileExtractFile */
+	DECLARE(SFILE_OPEN_FROM_MPQ);
+
+	return m;
+#endif
 }
 
 #ifdef __cplusplus
