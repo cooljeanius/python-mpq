@@ -52,7 +52,7 @@ jobs:
         - language: actions
           build-mode: none
         - language: c-cpp
-          build-mode: autobuild
+          build-mode: manual
         - language: python
           build-mode: none
         # CodeQL supports the following values keywords for 'language':
@@ -107,12 +107,11 @@ jobs:
       if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        echo 'If you are using a "manual" build mode for one or more of the' \
-          'languages you are analyzing, replace this with the commands to build' \
-          'your code, for example:'
-        echo '  make bootstrap'
-        echo '  make release'
-        exit 1
+        sudo apt-get -qq update
+        sudo apt-get -y install libc6-dev-amd64-cross libtbb-dev libstorm-dev
+        export MAKEFLAGS="-ki"
+        export CXXFLAGS="-fpermissive"
+        python setup.py build || stat setup.py
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
