@@ -3,7 +3,7 @@
 *.pyc
 
 # setup.py generated files
-build/
+build/temp.*/*
 dist/
 *.egg-info/
 .eggs/
