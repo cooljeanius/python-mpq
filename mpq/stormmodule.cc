@@ -816,7 +816,7 @@ MOD_INIT(storm) {
 #else
 	m = PyModule_Create(&moduledef);
 #endif
-	if (m == NULL) return;
+	if (m == NULL) return NULL;
 
 	StormError = PyErr_NewException((char *)"storm.error", NULL, NULL);
 	Py_INCREF(StormError);
